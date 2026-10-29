@@ -1,0 +1,6 @@
+{
+  "name": "Desafio em Sala",
+  "description": "Um app de quiz e gincanas em tempo real para salas de aula, inspirado no Kahoot.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
