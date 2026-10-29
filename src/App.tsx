@@ -21,6 +21,7 @@ import {
 import { db } from './firebase';
 import { TeacherDashboard } from './TeacherDashboard';
 import { seedGameTemplates } from './dbUtils';
+import { ColorsGame } from './ColorsGame';
 
 // --- Shared Components ---
 
@@ -252,10 +253,14 @@ const EnrollmentScreen = ({
 
 const ArenaScreen = ({ 
   sessionId, 
-  onBack 
+  nickname,
+  onBack,
+  onStartGame 
 }: { 
   sessionId: string, 
-  onBack: () => void 
+  nickname: string,
+  onBack: () => void,
+  onStartGame: (type: string) => void
 }) => {
   const [activeGameType, setActiveGameType] = useState<string | null>(null);
 
@@ -265,12 +270,18 @@ const ArenaScreen = ({
     const unsub = onSnapshot(doc(db, 'sessions', sessionId), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
-        setActiveGameType(data.activeGameType || null);
+        const type = data.activeGameType || null;
+        setActiveGameType(type);
+        
+        // If the teacher has started the game (status changes to 'playing')
+        if (data.status === 'playing' && type) {
+          onStartGame(type);
+        }
       }
     });
 
     return () => unsub();
-  }, [sessionId]);
+  }, [sessionId, onStartGame]);
 
   const games = [
     { name: 'VERDADEIRO\nOU FALSO', type: 'true_false', angle: 0 },
@@ -285,12 +296,15 @@ const ArenaScreen = ({
 
   return (
     <div className="flex flex-col items-center justify-start h-full pt-12 px-6 overflow-hidden relative z-10">
-      <button 
-        onClick={onBack}
-        className="absolute top-8 left-8 text-white/50 hover:text-white transition-colors z-50"
-      >
-        <ChevronLeft size={32} />
-      </button>
+      <div className="absolute top-8 left-8 flex items-center gap-3">
+        <button onClick={onBack} className="text-white/50 hover:text-white transition-colors">
+          <ChevronLeft size={32} />
+        </button>
+        <div className="flex flex-col">
+          <span className="text-[8px] font-black text-sky-400 uppercase tracking-widest">Jogador</span>
+          <span className="text-xs font-bold uppercase">{nickname}</span>
+        </div>
+      </div>
 
       <div className="relative w-full h-full flex items-center justify-center">
         <div className="absolute w-[450px] h-[450px] bg-blue-500/20 rounded-full blur-[80px]" />
@@ -490,7 +504,7 @@ export default function App() {
             </motion.div>
           )}
 
-          {currentPage === 'arena' && sessionId && (
+          {currentPage === 'arena' && sessionId && nickname && (
             <motion.div 
               key="arena"
               initial={{ opacity: 0, y: 100 }}
@@ -501,7 +515,27 @@ export default function App() {
             >
               <ArenaScreen 
                 sessionId={sessionId}
+                nickname={nickname}
                 onBack={() => setCurrentPage('home')} 
+                onStartGame={(type) => {
+                  if (type === 'colors') setCurrentPage('game-colors');
+                }}
+              />
+            </motion.div>
+          )}
+
+          {currentPage === 'game-colors' && sessionId && nickname && (
+            <motion.div 
+              key="game-colors"
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 1.2 }}
+              className="h-full"
+            >
+              <ColorsGame 
+                sessionId={sessionId} 
+                nickname={nickname} 
+                onGameOver={() => setCurrentPage('arena')} 
               />
             </motion.div>
           )}
