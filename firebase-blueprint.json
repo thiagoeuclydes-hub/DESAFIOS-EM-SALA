@@ -1,0 +1,73 @@
+{
+  "entities": {
+    "GameTemplate": {
+      "title": "Game Template",
+      "description": "Definition of a game (quiz, challenge, etc.) that can be started by a teacher.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "description": "The name of the game." },
+        "type": { "type": "string", "enum": ["quiz", "true_false", "challenge", "colors", "stay_or_leave"], "description": "Type of the game." },
+        "content": { "type": "object", "description": "The questions or rules of the game." },
+        "teacherId": { "type": "string", "description": "UID of the teacher who created the template." },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "type", "teacherId", "createdAt"]
+    },
+    "GameSession": {
+      "title": "Game Session",
+      "description": "A live instance of a game template being played in a classroom.",
+      "type": "object",
+      "properties": {
+        "gameTemplateId": { "type": "string" },
+        "teacherId": { "type": "string" },
+        "pin": { "type": "string", "description": "Access code for students." },
+        "status": { "type": "string", "enum": ["waiting", "playing", "finished"] },
+        "currentQuestionIndex": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["gameTemplateId", "teacherId", "pin", "status", "createdAt"]
+    },
+    "Player": {
+      "title": "Player",
+      "description": "A student participating in a game session.",
+      "type": "object",
+      "properties": {
+        "sessionId": { "type": "string" },
+        "nickname": { "type": "string" },
+        "score": { "type": "number" },
+        "lastAnswer": { "type": "object" },
+        "isCorrect": { "type": "boolean" },
+        "joinedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["sessionId", "nickname", "score", "joinedAt"]
+    },
+    "Teacher": {
+      "title": "Teacher",
+      "description": "A teacher with custom username/password access.",
+      "type": "object",
+      "properties": {
+        "username": { "type": "string" },
+        "password": { "type": "string" }
+      },
+      "required": ["username", "password"]
+    }
+  },
+  "firestore": {
+    "/teachers/{teacherId}": {
+      "schema": "Teacher",
+      "description": "Custom teacher credentials."
+    },
+    "/gameTemplates/{gameId}": {
+      "schema": "GameTemplate",
+      "description": "Collection of game templates created by teachers."
+    },
+    "/sessions/{sessionId}": {
+      "schema": "GameSession",
+      "description": "Active game sessions."
+    },
+    "/sessions/{sessionId}/players/{playerId}": {
+      "schema": "Player",
+      "description": "Players in a specific session."
+    }
+  }
+}
