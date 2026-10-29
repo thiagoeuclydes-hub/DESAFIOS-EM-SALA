@@ -165,12 +165,22 @@ const EnrollmentScreen = ({
 
       if (!snapshot.empty) {
         const sessionId = snapshot.docs[0].id;
-        onJoinSuccess(sessionId, nickname);
+        const playerId = `${nickname.toLowerCase().trim()}-${Date.now()}`;
+        
+        // Create player record immediately
+        const playerRef = doc(db, `sessions/${sessionId}/players`, playerId);
+        await setDoc(playerRef, {
+          nickname,
+          score: 0,
+          joinedAt: serverTimestamp(),
+        });
+
+        onJoinSuccess(sessionId, nickname, playerId);
       } else {
         setError('Sala não encontrada ou já iniciada');
       }
     } catch (err) {
-      const msg = handleFirestoreError(err, OperationType.GET, 'sessions');
+      const msg = handleFirestoreError(err, OperationType.WRITE, 'players');
       setError(`Erro: ${msg}`);
     } finally {
       setLoading(false);
@@ -232,56 +242,49 @@ const EnrollmentScreen = ({
           </BeveledButton>
         </div>
       </div>
-
-      <div className="flex flex-row gap-4 w-full max-w-md justify-center items-start opacity-50 pointer-events-none">
-        <ClippedButton 
-          color="yellow" 
-          className="flex-1 h-12 text-[9px] flex items-center justify-center font-black"
-        >
-          EQUIPES
-        </ClippedButton>
-        <ClippedButton 
-          color="yellow" 
-          className="flex-1 h-12 text-[9px] flex items-center justify-center font-black"
-        >
-          INDIVIDUAL
-        </ClippedButton>
-      </div>
     </div>
   );
 };
 
 const ArenaScreen = ({ 
   sessionId, 
+  playerId,
   nickname,
   onBack,
   onStartGame 
 }: { 
   sessionId: string, 
+  playerId: string,
   nickname: string,
   onBack: () => void,
   onStartGame: (type: string) => void
 }) => {
   const [activeGameType, setActiveGameType] = useState<string | null>(null);
+  const [playerScore, setPlayerScore] = useState(0);
 
   useEffect(() => {
-    if (!sessionId) return;
+    if (!sessionId || !playerId) return;
     
-    const unsub = onSnapshot(doc(db, 'sessions', sessionId), (docSnap) => {
+    // Listen to session for released games
+    const unsubSession = onSnapshot(doc(db, 'sessions', sessionId), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
-        const type = data.activeGameType || null;
-        setActiveGameType(type);
-        
-        // If the teacher has started the game (status changes to 'playing')
-        if (data.status === 'playing' && type) {
-          onStartGame(type);
-        }
+        setActiveGameType(data.activeGameType || null);
       }
     });
 
-    return () => unsub();
-  }, [sessionId, onStartGame]);
+    // Listen to player's own score
+    const unsubPlayer = onSnapshot(doc(db, `sessions/${sessionId}/players`, playerId), (docSnap) => {
+      if (docSnap.exists()) {
+        setPlayerScore(docSnap.data().score || 0);
+      }
+    });
+
+    return () => {
+      unsubSession();
+      unsubPlayer();
+    };
+  }, [sessionId, playerId]);
 
   const games = [
     { name: 'VERDADEIRO\nOU FALSO', type: 'true_false', angle: 0 },
@@ -296,14 +299,25 @@ const ArenaScreen = ({
 
   return (
     <div className="flex flex-col items-center justify-start h-full pt-12 px-6 overflow-hidden relative z-10">
-      <div className="absolute top-8 left-8 flex items-center gap-3">
-        <button onClick={onBack} className="text-white/50 hover:text-white transition-colors">
-          <ChevronLeft size={32} />
-        </button>
-        <div className="flex flex-col">
-          <span className="text-[8px] font-black text-sky-400 uppercase tracking-widest">Jogador</span>
-          <span className="text-xs font-bold uppercase">{nickname}</span>
-        </div>
+      {/* Header / Student Info */}
+      <div className="w-full flex items-center justify-between mb-4">
+         <div className="flex items-center gap-3">
+            <button onClick={onBack} className="text-white/30 hover:text-white transition-colors">
+              <ChevronLeft size={24} />
+            </button>
+            <div className="flex flex-col">
+              <span className="text-[10px] font-black text-sky-400 uppercase tracking-widest leading-none">Jogador</span>
+              <span className="text-sm font-black uppercase truncate max-w-[100px]">{nickname}</span>
+            </div>
+         </div>
+         <div className="bg-sky-500/20 border-2 border-sky-400/40 rounded-2xl px-4 py-1 flex flex-col items-end">
+            <span className="text-[8px] font-black text-sky-300 uppercase leading-none mb-0.5">Pontuação</span>
+            <span className="text-lg font-black text-white leading-none">{playerScore} <span className="text-[10px]">PTS</span></span>
+         </div>
+      </div>
+
+      <div className="bg-white/5 border border-white/10 rounded-full px-6 py-1 mb-2">
+         <h2 className="text-[10px] font-black text-white/50 tracking-[0.4em] uppercase">Painel do Aluno</h2>
       </div>
 
       <div className="relative w-full h-full flex items-center justify-center">
@@ -316,33 +330,34 @@ const ArenaScreen = ({
               key={i}
               className="absolute flex items-center justify-center transition-all duration-500"
               style={{ 
-                transform: `rotate(${game.angle}deg) translateY(-165px)`,
+                transform: `rotate(${game.angle}deg) translateY(-160px)`,
                 opacity: isActive || !activeGameType ? 1 : 0.2,
-                scale: isActive ? 1.1 : 1
+                scale: isActive ? 1.15 : 1,
+                zIndex: isActive ? 30 : 10
               }}
             >
               <button 
-                disabled={activeGameType && !isActive ? true : false}
+                onClick={() => isActive && onStartGame(game.type)}
                 className={`${
-                  isActive ? 'bg-sky-400 border-white ring-4 ring-sky-500/50' : 'bg-sky-300/80 border-white/60'
-                } border-t-2 shadow-[inset_0_4px_12px_rgba(255,255,255,0.6),0_15px_30px_rgba(0,0,0,0.5)] w-28 h-20 text-[10px] font-black text-blue-900 transition-all active:scale-95 flex items-center justify-center text-center px-2`}
+                  isActive ? 'bg-sky-400 border-white ring-4 ring-sky-500/50 scale-105' : 'bg-sky-300/80 border-white/60'
+                } border-t-2 shadow-[inset_0_4px_12px_rgba(255,255,255,0.6),0_15px_30px_rgba(0,0,0,0.5)] w-28 h-20 text-[10px] font-black text-blue-900 transition-all active:scale-95 flex items-center justify-center text-center px-2 cursor-pointer`}
                 style={{ 
                   clipPath: 'polygon(5% 0%, 95% 0%, 80% 100%, 20% 100%)' 
                 }}
               >
                 <div className="whitespace-pre-line leading-tight tracking-tighter uppercase">
                   {game.name}
-                  {isActive && <div className="text-[7px] mt-1 text-blue-700 animate-pulse">LIBERADO!</div>}
+                  {isActive && <div className="text-[7px] mt-1 text-blue-800 animate-pulse bg-white/40 px-1 rounded">DISPONÍVEL!</div>}
                 </div>
               </button>
             </div>
           );
         })}
 
-        <div className="z-20">
+        <div className="z-20 pointer-events-none">
           <ClippedButton 
             color="yellow" 
-            className="w-48 h-28 text-xl font-black leading-tight uppercase flex items-center justify-center shadow-2xl scale-110"
+            className="w-44 h-24 text-lg font-black leading-tight uppercase flex items-center justify-center shadow-2xl scale-110"
           >
             Arena de <br /> Jogos
           </ClippedButton>
@@ -462,6 +477,7 @@ export default function App() {
   const [currentPage, setCurrentPage] = useState('home');
   const [teacherId, setTeacherId] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [playerId, setPlayerId] = useState<string | null>(null);
   const [nickname, setNickname] = useState<string | null>(null);
 
   return (
@@ -495,16 +511,17 @@ export default function App() {
             >
               <EnrollmentScreen 
                 onBack={() => setCurrentPage('home')} 
-                onJoinSuccess={(sid, nick) => {
+                onJoinSuccess={(sid, nick, pid) => {
                   setSessionId(sid);
                   setNickname(nick);
+                  setPlayerId(pid);
                   setCurrentPage('arena');
                 }}
               />
             </motion.div>
           )}
 
-          {currentPage === 'arena' && sessionId && nickname && (
+          {currentPage === 'arena' && sessionId && playerId && nickname && (
             <motion.div 
               key="arena"
               initial={{ opacity: 0, y: 100 }}
@@ -515,6 +532,7 @@ export default function App() {
             >
               <ArenaScreen 
                 sessionId={sessionId}
+                playerId={playerId}
                 nickname={nickname}
                 onBack={() => setCurrentPage('home')} 
                 onStartGame={(type) => {
@@ -524,7 +542,7 @@ export default function App() {
             </motion.div>
           )}
 
-          {currentPage === 'game-colors' && sessionId && nickname && (
+          {currentPage === 'game-colors' && sessionId && playerId && nickname && (
             <motion.div 
               key="game-colors"
               initial={{ opacity: 0, scale: 0.8 }}
@@ -534,6 +552,7 @@ export default function App() {
             >
               <ColorsGame 
                 sessionId={sessionId} 
+                playerId={playerId}
                 nickname={nickname} 
                 onGameOver={() => setCurrentPage('arena')} 
               />
